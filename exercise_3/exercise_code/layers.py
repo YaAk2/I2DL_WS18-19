@@ -190,15 +190,14 @@ def max_pool_backward_naive(dout, cache):
     _, _, out_h, out_w = dout.shape
     
     dx = np.zeros_like(x)
-    #print(maxIdx)
     
     for n in range(N):
         for c in range(C):
-            for i, h in enumerate(range(0, out_h, stride)):
-                for j, w in enumerate(range(0, out_w, stride)):
-                    maxId = maxIdx[n, c, i, j] 
-                    maximum = x[n, c, h:h + pool_height, w:w + pool_width][maxId[0], maxId[1]]
-                    dx[n, c, h:h + pool_height, w:w + pool_width][maxId[0], maxId[1]] = maximum*dout[n, c, i, j]
+            for h in range(out_h):
+                for w in range(out_w):
+                    x_pool = x[n, c, h*stride:h*stride + pool_height, w*stride:w*stride + pool_width]
+                    mask = (x_pool == np.max(x_pool))
+                    dx[n, c, h*stride:h*stride + pool_height, w*stride:w*stride + pool_width] = mask*dout[n, c, h, w]
     
     #############################################################################
     #                             END OF YOUR CODE                              #
