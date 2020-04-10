@@ -337,8 +337,8 @@ def spatial_batchnorm_forward(x, gamma, beta, bn_param):
       old information is discarded completely at every time step, while
       momentum=1 means that new information is never incorporated. The
       default of momentum=0.9 should work well in most situations.
-    - running_mean: Array of shape (D,) giving running mean of features
-    - running_var Array of shape (D,) giving running variance of features
+    - running_mean: Array of shape (C,) giving running mean of features
+    - running_var Array of shape (C,) giving running variance of features
 
     Returns a tuple of:
     - out: Output data, of shape (N, C, H, W)
@@ -353,6 +353,35 @@ def spatial_batchnorm_forward(x, gamma, beta, bn_param):
     # version of batch normalization defined above. Your implementation should  #
     # be very short; ours is less than five lines.                              #
     #############################################################################
+    
+    #http://d2l.ai/chapter_convolutional-modern/batch-norm.html
+    
+    N, C, H, W = x.shape
+    
+    mode = bn_param['mode']    
+    eps = bn_param.get('eps', 1e-5)
+    momentum = bn_param.get('momentum', 0.9)
+    running_mean = bn_param.get('running_mean', np.zeros((1, C, 1, 1), dtype=x.dtype))
+    running_var = bn_param.get('running_var', np.zeros((1, C, 1, 1), dtype=x.dtype))
+    
+    N, C, H, W = x.shape
+    
+    mean = x.mean(axis=(0, 2, 3), keepdims=True)
+    var = ((x - mean)**2).mean(axis=(0, 2, 3), keepdims=True)
+    
+    if mode == 'train':
+        x_norm = (x - mean)/np.sqrt(var + eps)
+        running_mean = momentum*running_mean + (1.0 - momentum)*mean
+        running_var = momentum*running_var + (1.0 - momentum)*var  
+    elif mode == 'test':
+        x_norm = (x - running_mean)/np.sqrt(running_var + eps)
+    
+    bn_param['running_mean'] = running_mean
+    bn_param['running_var'] = running_var
+    
+    out = gamma.reshape((1, C, 1, 1))*x_norm + beta.reshape((1, C, 1, 1))
+    cache = (x, x_norm, mean, var, gamma, eps)
+    
 
     #############################################################################
     #                             END OF YOUR CODE                              #
@@ -383,7 +412,22 @@ def spatial_batchnorm_backward(dout, cache):
     # version of batch normalization defined above. Your implementation should  #
     # be very short; ours is less than five lines.                              #
     #############################################################################
-
+    
+    x, x_norm, mean, var, gamma, eps = cache
+    N, C, H, W = x.shape
+    
+    x_mu = x - mean
+    var_inv = 1./np.sqrt(var + eps)
+    
+    dx_norm = dout*gamma.reshape((1, C, 1, 1))
+    dvar = dx_norm*x_mu*-0.5*(var + 1e-8)**(-3/2)
+    dmu = dx_norm*-var_inv + dvar*(1/N)*-2.*x_mu
+    
+    
+    dx = (dx_norm*var_inv) + (dmu/N) + (dvar*(2/N)*x_mu)
+    dbeta = np.sum(dout, axis=(0, 2, 3))
+    dgamma = np.sum(dout*x_norm, axis=(0, 2, 3))
+    
     #############################################################################
     #                             END OF YOUR CODE                              #
     #############################################################################
