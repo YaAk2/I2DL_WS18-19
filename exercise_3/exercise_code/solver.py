@@ -48,68 +48,93 @@ class Solver(object):
             model.cuda()
 
         print('START TRAIN.')
-        for epoch in range(num_epochs):
-            # TRAINING
-
-            for i, (inputs, targets) in enumerate(train_loader, 1):
-                inputs, targets = Variable(inputs), Variable(targets)
-                if model.is_cuda:
-                    inputs, targets = inputs.cuda(), targets.cuda()
-
+        ########################################################################
+        # TODO:                                                                #
+        # Write your own personal training method for our solver. In each      #
+        # epoch iter_per_epoch shuffled training batches are processed. The    #
+        # loss for each batch is stored in self.train_loss_history. Every      #
+        # log_nth iteration the loss is logged. After one epoch the training   #
+        # accuracy of the last mini batch is logged and stored in              #
+        # self.train_acc_history. We validate at the end of each epoch, log    #
+        # the result and store the accuracy of the entire validation set in    #
+        # self.val_acc_history.                                                #
+        #                                                                      #
+        # Your logging could like something like:                              #
+        #   ...                                                                #
+        #   [Iteration 700/4800] TRAIN loss: 1.452                             #
+        #   [Iteration 800/4800] TRAIN loss: 1.409                             #
+        #   [Iteration 900/4800] TRAIN loss: 1.374                             #
+        #   [Epoch 1/5] TRAIN acc/loss: 0.560/1.374                            #
+        #   [Epoch 1/5] VAL   acc/loss: 0.539/1.310                            #
+        #   ...                                                                #
+        ########################################################################
+        
+        
+        for epoch in range(num_epochs):  
+            ############
+            # Training #
+            ############
+            
+            running_tr_loss = 0.0
+            counter = 0
+            for batch_idx, (X_tr_batch, Y_tr_batch) in enumerate(train_loader):
+                counter+=1
+                if torch.cuda.is_available():
+                    X_tr_batch, Y_tr_batch = X_tr_batch.cuda(), Y_tr_batch.cuda()
+                
+                ## zero the parameter gradients
                 optim.zero_grad()
-                outputs = model(inputs)
-                loss = self.loss_func(outputs, targets)
-                loss.backward()
+                
+                output_tr = model(X_tr_batch)
+                train_loss = self.loss_func(output_tr, Y_tr_batch)
+                
+                # computes dloss/dw for every parameter w which has requires_grad=True
+                train_loss.backward()
+                
+                # updates the parameters
                 optim.step()
+                
+                # print statistics
+                if log_nth == counter:  
+                    print("[Iteration %d/%d] TRAIN loss: %.3f" % (batch_idx + 1, iter_per_epoch, train_loss.item()))
+                    counter = 0
+                    
+                running_tr_loss += train_loss.item()
+                    
+            # save loss for plotting
+            self.train_loss_history.append(running_tr_loss/len(train_loader))
 
-                self.train_loss_history.append(loss.data.cpu().numpy())
-                if log_nth and i % log_nth == 0:
-                    last_log_nth_losses = self.train_loss_history[-log_nth:]
-                    train_loss = np.mean(last_log_nth_losses)
-                    print('[Iteration %d/%d] TRAIN loss: %.3f' % \
-                        (i + epoch * iter_per_epoch,
-                         iter_per_epoch * num_epochs,
-                         train_loss))
-
-            _, preds = torch.max(outputs, 1)
-
-            # Only allow images/pixels with label >= 0 e.g. for segmentation
-            targets_mask = targets >= 0
-            train_acc = np.mean((preds == targets)[targets_mask].data.cpu().numpy())
+            # save accuracy for plotting
+            pred = torch.argmax(output_tr, dim=1)
+            train_acc = torch.sum(pred == Y_tr_batch).item()/train_loader.batch_size
             self.train_acc_history.append(train_acc)
-            if log_nth:
-                print('[Epoch %d/%d] TRAIN acc/loss: %.3f/%.3f' % (epoch + 1,
-                                                                   num_epochs,
-                                                                   train_acc,
-                                                                   train_loss))
-            # VALIDATION
-            val_losses = []
-            val_scores = []
-            model.eval()
-            for inputs, targets in val_loader:
-                inputs, targets = Variable(inputs), Variable(targets)
-                if model.is_cuda:
-                    inputs, targets = inputs.cuda(), targets.cuda()
-
-                outputs = model.forward(inputs)
-                loss = self.loss_func(outputs, targets)
-                val_losses.append(loss.data.cpu().numpy())
-
-                _, preds = torch.max(outputs, 1)
-
-                # Only allow images/pixels with target >= 0 e.g. for segmentation
-                targets_mask = targets >= 0
-                scores = np.mean((preds == targets)[targets_mask].data.cpu().numpy())
-                val_scores.append(scores)
-
-            model.train()
-            val_acc, val_loss = np.mean(val_scores), np.mean(val_losses)
+            
+            ##############
+            # Validation #
+            ##############
+            running_val_loss = 0.0
+            for batch_idx, (X_val_batch, Y_val_batch) in enumerate(val_loader):
+                output_val = model(X_val_batch)
+                val_loss = self.loss_func(output_val, Y_val_batch)
+                running_val_loss += val_loss.item()
+            
+            # save loss for plotting
+            self.val_loss_history.append(running_val_loss/len(val_loader))
+            
+            # save accuracy for plotting
+            pred = torch.argmax(output_val, dim=1)
+            val_acc = torch.sum(pred == Y_val_batch).item()/val_loader.batch_size
             self.val_acc_history.append(val_acc)
-            self.val_loss_history.append(val_loss)
-            if log_nth:
-                print('[Epoch %d/%d] VAL   acc/loss: %.3f/%.3f' % (epoch + 1,
-                                                                   num_epochs,
-                                                                   val_acc,
-                                                                   val_loss))
-
-print('FINISH.')
+            
+            
+            print("[Epoch %d/%d] TRAIN acc/loss: %.3f/%.3f" % (epoch + 1, num_epochs, train_acc,
+                                                               running_tr_loss/len(train_loader)))
+            print("[Epoch %d/%d] VAL acc/loss: %.3f/%.3f" % (epoch + 1, num_epochs, val_acc, 
+                                                             running_val_loss/len(val_loader)))
+                
+                
+        
+        ########################################################################
+        #                             END OF YOUR CODE                         #
+        ########################################################################
+        print('FINISH.')

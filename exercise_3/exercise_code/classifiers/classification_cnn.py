@@ -2,6 +2,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import math
 
 
 class ClassificationCNN(nn.Module):
@@ -53,7 +54,25 @@ class ClassificationCNN(nn.Module):
         # will not coincide with the Jupyter notebook cell.                    #
         ########################################################################
         
-        pass
+        ### lecture (dimensions of cnns)
+        height_same_pad = int(((height - 1)*stride_conv - height + kernel_size)/2) # H=(H-F+2P)/S + 1
+        width_same_pad = int(((width - 1)*stride_conv - width + kernel_size)/2) # W=(W-F+2P)/S + 1
+        
+        height_post_conv1 = int((height + height_same_pad + width_same_pad - kernel_size)/stride_conv) + 1
+        width_post_conv1 = int((width + height_same_pad + width_same_pad - kernel_size)/stride_conv) + 1
+        in_features_fc_height = int((height_post_conv1 - pool)/stride_pool) + 1
+        in_features_fc_width = int((width_post_conv1 - pool)/stride_pool) + 1
+        ###
+        
+        self.conv1 = nn.Conv2d(channels, num_filters, kernel_size, stride=stride_conv, 
+                               padding=(height_same_pad, width_same_pad), bias=True)
+        with torch.no_grad():
+            self.conv1.weight = self.conv1.weight.mul_(weight_scale) 
+        
+        self.max_pool = nn.MaxPool2d(pool, stride=stride_pool)
+        self.fc1 = nn.Linear(in_features_fc_height*in_features_fc_width*num_filters, hidden_dim, bias=True)
+        self.dropout1 = nn.Dropout2d(dropout)
+        self.fc2 = nn.Linear(hidden_dim, num_classes, bias=True)
     
         ############################################################################
         #                             END OF YOUR CODE                             #
@@ -75,8 +94,16 @@ class ClassificationCNN(nn.Module):
         # transition from the spatial input image to the flat fully connected  #
         # layers.                                                              #
         ########################################################################
-        pass
-    
+        
+        x = self.conv1(x)
+        x = self.max_pool(x)
+        x = F.relu(x)
+        x = torch.flatten(x, 1)
+        x = self.fc1(x)
+        x = self.dropout1(x)
+        x = F.relu(x)
+        x = self.fc2(x)
+        
         ########################################################################
         #                             END OF YOUR CODE                         #
         ########################################################################
